@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import ts from 'typescript';
+const source=await readFile(new URL('../lib/engine.ts',import.meta.url),'utf8');
+const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const {buildPrompt,generateStep}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const prompt=buildPrompt('Write five captions','A cat on a keyboard','Previous-step observation','previous');
+assert.match(prompt,/Previous-step observation/);assert.match(prompt,/A cat on a keyboard/);
+process.env.GEMINI_API_KEY='test-only';let posted;
+globalThis.fetch=async(url,options)=>{posted=JSON.parse(options.body);return Response.json({candidates:[{content:{parts:[{text:'Five original captions'}]}}],usageMetadata:{promptTokenCount:20,candidatesTokenCount:6}});};
+const result=await generateStep('valid-model',prompt,{mimeType:'image/png',base64:'test-image'});assert.equal(result.success,true);assert.equal(posted.contents[0].parts[1].inlineData.data,'test-image');assert.equal(result.input_tokens,20);console.log('PASS image + previous output handoff and usage');
+globalThis.fetch=async()=>new Response('',{status:429});assert.equal((await generateStep('valid-model',prompt)).success,false);
+globalThis.fetch=async()=>Response.json({candidates:[]});assert.equal((await generateStep('valid-model',prompt)).success,false);
+globalThis.fetch=async()=>{throw new Error('private provider error');};assert.doesNotMatch((await generateStep('valid-model',prompt)).error,/private provider error/);console.log('PASS safe HTTP, empty-output and network-failure handling');
