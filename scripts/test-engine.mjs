@@ -6,9 +6,17 @@ const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext
 const {buildPrompt,generateStep}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
 const prompt=buildPrompt('Write five captions','A cat on a keyboard','Previous-step observation','previous');
 assert.match(prompt,/Previous-step observation/);assert.match(prompt,/A cat on a keyboard/);
-process.env.GEMINI_API_KEY='test-only';let posted;
+process.env.GEMINI_API_KEY='AIza-test-only';let posted;
 globalThis.fetch=async(url,options)=>{posted=JSON.parse(options.body);return Response.json({candidates:[{content:{parts:[{text:'Five original captions'}]}}],usageMetadata:{promptTokenCount:20,candidatesTokenCount:6}});};
 const result=await generateStep('valid-model',prompt,{mimeType:'image/png',base64:'test-image'});assert.equal(result.success,true);assert.equal(posted.contents[0].parts[1].inlineData.data,'test-image');assert.equal(result.input_tokens,20);console.log('PASS image + previous output handoff and usage');
 globalThis.fetch=async()=>new Response('',{status:429});assert.equal((await generateStep('valid-model',prompt)).success,false);
 globalThis.fetch=async()=>Response.json({candidates:[]});assert.equal((await generateStep('valid-model',prompt)).success,false);
 globalThis.fetch=async()=>{throw new Error('private provider error');};assert.doesNotMatch((await generateStep('valid-model',prompt)).error,/private provider error/);console.log('PASS safe HTTP, empty-output and network-failure handling');
+process.env.OPENAI_API_KEY='test-openai-key';let openaiRequest,openaiUrl;
+globalThis.fetch=async(url,options)=>{openaiUrl=url;openaiRequest=JSON.parse(options.body);return Response.json({output:[{type:'message',content:[{type:'output_text',text:'Original caption from image'}]}],usage:{input_tokens:34,output_tokens:8}});};
+const openai=await generateStep('gpt-4.1-mini',prompt,{mimeType:'image/png',base64:'source-image'});
+assert.equal(openaiUrl,'https://api.openai.com/v1/responses');assert.equal(openaiRequest.store,false);assert.equal(openaiRequest.input[0].content[1].image_url,'data:image/png;base64,source-image');assert.equal(openai.output,'Original caption from image');assert.equal(openai.output_tokens,8);console.log('PASS OpenAI image input, Responses output parsing, no remote storage, and usage');
+// An explicit OpenAI-only deployment can reuse the user's legacy variable name.
+delete process.env.OPENAI_API_KEY;process.env.AI_PROVIDER='openai';process.env.GEMINI_API_KEY='sk-test-legacy-openai';
+assert.equal((await generateStep('gpt-4.1-mini',prompt)).success,true);
+await assert.rejects(()=>generateStep('valid-model',prompt),/configured for OpenAI/);console.log('PASS legacy key alias is OpenAI-only and cannot be sent to Google');
