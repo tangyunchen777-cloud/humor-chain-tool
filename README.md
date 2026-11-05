@@ -11,6 +11,7 @@ Week 8: a separate Next.js application for creating and running sequential AI pr
 - Private source-image uploads (JPG/PNG/WebP, 4 MB); signed previews. Text scenes also work.
 - Per-chain generated-media history (latest 25 runs), immutable step/model/instruction snapshots, exact submitted prompts, outputs, latency and token counts. Step claims prevent duplicate or out-of-order execution. Failed/interrupted runs remain inspectable; pending runs can resume.
 - Light, dark and system modes, persisted locally. Responsive editor, labelled navigation and divider lines.
+- A single chain workspace: inline title/description, collapsible steps, image/scene input below the builder, and that chain's generated media below the runner. New drafts have an explicit selected state and empty history; switching chains clears the prior source input.
 
 ## Setup
 
@@ -27,6 +28,8 @@ Deploy as a separate Vercel project. Disable Vercel Deployment Protection for gr
 `pnpm lint` and `pnpm build`.
 
 `node scripts/test-engine.mjs` exercises real request construction with a mocked provider: previous-output handoff, source image, empty output, HTTP failure and timeout handling. `node scripts/check-access.mjs https://DEPLOYMENT_HOST` verifies anonymous protection.
+
+`node scripts/test-studio-view.mjs` checks that drafts never inherit another chain's results, switching chains cannot retain a foreign selected run, and older run selection stays within the current chain.
 
 Run `supabase/tests/studio_access.sql` as the database owner. Transactional fixtures verify chain/step CRUD, reordering, stale-save rejection, sequential execution, duplicate prevention, previous-output handoff, preserved history and member/anonymous denial. All fixture and temporary role changes roll back.
 
