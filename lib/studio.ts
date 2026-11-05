@@ -9,7 +9,7 @@ export async function loadStudio(selected?:string|null):Promise<Data>{
  const [{data:chains,error:c},{data:steps,error:s},{data:models,error:m}]=await Promise.all([
  supabase.from('studio_chains').select('*').order('created_at').limit(200),
  supabase.from('studio_steps').select('*').is('deleted_at',null).order('position').limit(1600),
- supabase.from('llm_models').select('name,model_key,llm_providers!inner(family,enabled,deleted_at)').eq('enabled',true).is('deleted_at',null).eq('llm_providers.family','google').eq('llm_providers.enabled',true).is('llm_providers.deleted_at',null).order('priority')]);
+ supabase.from('llm_models').select('name,model_key,llm_providers!inner(name,family,enabled,deleted_at)').eq('enabled',true).is('deleted_at',null).eq('llm_providers.enabled',true).is('llm_providers.deleted_at',null).order('priority')]);
  if(c||s||m)throw new Error('The workspace could not load. Please try again.');
  const id=selected??chains?.find(x=>!x.deleted_at)?.id??null;
  const {data:runs,error:r}=id?await supabase.from('studio_runs').select('*').eq('chain_id',id).order('created_at',{ascending:false}).limit(25):{data:[],error:null};
@@ -17,5 +17,6 @@ export async function loadStudio(selected?:string|null):Promise<Data>{
  const {data:runSteps,error:rs}=runs?.length?await supabase.from('studio_run_steps').select('*').in('run_id',runs.map(r=>r.id)).order('position'):{data:[],error:null};
  if(rs)throw new Error('Step history could not load.');
  const hydrated=await Promise.all((runs??[]).map(async run=>({...run,image_url:run.image_path?(await supabase.storage.from('prompt-studio').createSignedUrl(run.image_path,3600)).data?.signedUrl:undefined})));
- return {chains:chains??[],steps:steps??[],models:models??[],runs:hydrated,runSteps:runSteps??[],selected:id};
+ const supported=(models??[]).filter(m=>{const p=Array.isArray(m.llm_providers)?m.llm_providers[0]:m.llm_providers;const openai=p?.name==='OpenAI'&&m.model_key==='gpt-4.1-mini';return process.env.AI_PROVIDER==='openai'?openai:p?.family==='google'||openai;});
+ return {chains:chains??[],steps:steps??[],models:supported,runs:hydrated,runSteps:runSteps??[],selected:id};
 }
